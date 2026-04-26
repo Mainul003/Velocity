@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Velocity — The Revolution</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Space Grotesk', sans-serif;
+  background: #080808;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 16px 48px;
+  gap: 20px;
+}
+::-webkit-scrollbar { width: 0; height: 0; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(0.95)} }
+@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+@keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+@keyframes ping { 0%{transform:scale(1);opacity:1} 75%,100%{transform:scale(2);opacity:0} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── DESIGN TOKENS ────────────────────────────────────────────────
+const C = {
+  bg:        '#0B0B0D',
+  surface:   '#141416',
+  card:      '#1C1C1F',
+  card2:     '#242428',
+  border:    '#2C2C30',
+  border2:   '#383840',
+  accent:    '#4F8EFF',
+  accentDim: 'rgba(79,142,255,0.14)',
+  accentMid: 'rgba(79,142,255,0.35)',
+  green:     '#22C55E',
+  greenDim:  'rgba(34,197,94,0.14)',
+  red:       '#EF4444',
+  redDim:    'rgba(239,68,68,0.14)',
+  amber:     '#F59E0B',
+  amberDim:  'rgba(245,158,11,0.14)',
+  purple:    '#A78BFA',
+  purpleDim: 'rgba(167,139,250,0.14)',
+  text:      '#F2F2F7',
+  text2:     '#8E8E96',
+  text3:     '#3C3C44',
+  mapBg:     '#10141E',
+};
+
+// ─── MAP SVG ──────────────────────────────────────────────────────
+function MapSVG({ showRoute=false, showDriver=false, driverX=195, driverY=180, compact=false }) {
+  const h = compact ? 180 : 260;
+  return (
+    <svg width="100%" height="100%" viewBox={`0 0 390 ${h}`} preserveAspectRatio="xMidYMid slice">
+      <rect width="390" height={h} fill={C.mapBg}/>
+      {/* Blocks */}
+      {[[10,10,100,60],[120,10,80,60],[220,10,90,55],[320,10,60,55],[10,90,70,80],[100,90,80,80],[200,90,60,80],[280,90,100,80],[10,195,80,60],[110,195,100,60],[230,195,90,60],[340,195,40,60]].map(([x,y,w,hh],i)=>
+        <rect key={i} x={x} y={y} width={w} height={hh} rx="4" fill="#161B2A" stroke="#1E2740" strokeWidth="0.5"/>
+      )}
+      {/* Park */}
+      <rect x="180" y="90" width="95" height="80" rx="6" fill="#0D2B1A" stroke="#143D27" strokeWidth="0.5" opacity="0.8"/>
+      <rect x="195" y="100" width="20" height="14" rx="3" fill="#166534" opacity="0.6"/>
+      <rect x="225" y="108" width="14" height="10" rx="2" fill="#166534" opacity="0.5"/>
+      <rect x="215" y="130" width="18" height="12" rx="3" fill="#166534" opacity="0.5"/>
+      {/* Street network */}
+      {[75,165,h-20].filter(y=>y<h).map(y=><line key={y} x1="0" y1={y} x2="390" y2={y} stroke="#1E2845" strokeWidth={y===165?7:4}/>)}
+      {[90,190,300].map(x=><line key={x} x1={x} y1="0" x2={x} y2={h} stroke="#1E2845" strokeWidth={x===190?7:4}/>)}
+      {/* Street labels */}
+      <text x="130" y="170" fill="#253350" fontSize="8" fontFamily="Space Grotesk" fontWeight="600">MAIN STREET</text>
+      <text x="195" y="50" fill="#253350" fontSize="7" fontFamily="Space Grotesk" fontWeight="600" transform="rotate(90,195,50)">OAK AVE</text>
+      {/* Route path */}
+      {showRoute && <>
+        <path d="M 195 230 L 195 165 L 90 165 L 90 75 L 190 75" stroke={C.accent} strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M 195 230 L 195 165 L 90 165 L 90 75 L 190 75" stroke="rgba(79,142,255,0.25)" strokeWidth="12" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+      </>}
+      {/* Destination */}
+      {showRoute && <>
+        <circle cx="190" cy="75" r="14" fill={C.red} opacity="0.2"/>
+        <circle cx="190" cy="75" r="8" fill={C.red}/>
+        <circle cx="190" cy="75" r="3" fill="white"/>
+      </>}
+      {/* User dot */}
+      <circle cx="195" cy="230" r="18" fill={C.accent} opacity="0.1"/>
+      <circle cx="195" cy="230" r="9" fill={C.accent}/>
+      <circle cx="195" cy="230" r="4" fill="white"/>
+      {/* Driver marker */}
+      {showDriver && <>
+        <circle cx={driverX} cy={driverY} r="16" fill={C.amber} opacity="0.2"/>
+        <circle cx={driverX} cy={driverY} r="10" fill={C.amber}/>
+        <text x={driverX} y={driverY+4} textAnchor="middle" fontSize="10">🚗</text>
+      </>}
+      {/* Ambient cars */}
+      {[[60,80],[310,170],[150,40]].map(([x,y],i)=>
+        <g key={i} opacity="0.4">
+          <circle cx={x} cy={y} r="7" fill="#2A3550"/>
+          <text x={x} y={y+3} textAnchor="middle" fontSize="7">🚙</text>
+        </g>
+      )}
+    </svg>
+  );
+}
+
+// ─── SHARED UI ATOMS ──────────────────────────────────────────────
+function StatusBar({ light=false }) {
+  const [time, setTime] = useState('');
+  useEffect(()=>{
+    const fmt=()=>{const n=new Date();return n.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});};
+    setTime(fmt());
+    const id=setInterval(()=>setTime(fmt()),10000);
+    return()=>clearInterval(id);
+  },[]);
+  const col = light ? '#000' : C.text;
+  return (
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 22px 6px',color:col,flexShrink:0}}>
+      <span style={{fontSize:14,fontWeight:700}}>{time||'09:41'}</span>
+      <div style={{display:'flex',gap:5,alignItems:'center'}}>
+        {/* Signal */}
+        <svg width="14" height="10" viewBox="0 0 14 10"><rect x="0" y="6" width="2.5" height="4" rx="0.5" fill={col}/><rect x="3.5" y="4" width="2.5" height="6" rx="0.5" fill={col}/><rect x="7" y="2" width="2.5" height="8" rx="0.5" fill={col}/><rect x="10.5" y="0" width="2.5" height="10" rx="0.5" fill={col}/></svg>
+        {/* WiFi */}
+        <svg width="14" height="10" viewBox="0 0 18 13"><path d="M9 12a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill={col}/><path d="M4.5 8.5C5.8 7.2 7.3 6.5 9 6.5s3.2.7 4.5 2" stroke={col} strokeWidth="1.5" fill="none" strokeLinecap="round"/><path d="M1.5 5.5C3.5 3.5 6.1 2.5 9 2.5s5.5 1 7.5 3" stroke={col} strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
+        {/* Battery */}
+        <svg width="22" height="11" viewBox="0 0 22 11"><rect x="0" y="1" width="19" height="9" rx="2" stroke={col} strokeWidth="1.5" fill="none"/><rect x="1.5" y="2.5" width="14" height="6" rx="1" fill={col}/><rect x="19.5" y="3.5" width="2" height="4" rx="1" fill={col} opacity="0.6"/></svg>
+      </div>
+    </div>
+  );
+}
+
+function HomeIndicator({ dark=false }) {
+  return <div style={{width:134,height:5,background:dark?'rgba(0,0,0,0.25)':'rgba(255,255,255,0.22)',borderRadius:3,margin:'6px auto 10px',flexShrink:0}}/>;
+}
+
+function TopBar({ title, onBack, right, transparent=false }) {
+  return (
+    <div style={{display:'flex',alignItems:'center',padding:'6px 16px 10px',gap:10,flexShrink:0}}>
+      {onBack && (
+        <button onClick={onBack} style={{width:34,height:34,borderRadius:10,background:C.card2,border:`1px solid ${C.border}`,color:C.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+        </button>
+      )}
+      <span style={{fontSize:19,fontWeight:700,flex:1,color:C.text,letterSpacing:'-0.3px'}}>{title}</span>
+      {right}
+    </div>
+  );
+}
+
+function Card({ children, style={}, onClick, glow }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={()=>setHov(true)}
+      onMouseLeave={()=>setHov(false)}
+      style={{
+        background: hov && onClick ? C.card2 : C.card,
+        borderRadius:16, padding:'14px 16px',
+        border:`1px solid ${glow ? C.accent : C.border}`,
+        boxShadow: glow ? `0 0 20px ${C.accentMid}` : 'none',
+        cursor: onClick ? 'pointer' : 'default',
+        transition:'all 0.18s',
+        animation:'slideUp 0.25s ease',
+        ...style
+      }}
+    >{children}</div>
+  );
+}
+
+function Badge({ color='blue', children, dot=false }) {
+  const map = { blue:[C.accent,C.accentDim], green:[C.green,C.greenDim], red:[C.red,C.redDim], amber:[C.amber,C.amberDim], purple:[C.purple,C.purpleDim] };
+  const [fg,bg] = map[color]||map.blue;
+  return (
+    <span style={{display:'inline-flex',alignItems:'center',gap:5,background:bg,color:fg,fontSize:10,fontWeight:700,padding:'3px 9px',borderRadius:20,border:`1px solid ${fg}22`,letterSpacing:'0.3px',textTransform:'uppercase'}}>
+      {dot && <span style={{width:5,height:5,borderRadius:'50%',background:fg,display:'inline-block'}}/>}
+      {children}
+    </span>
+  );
+}
+
+function Avatar({ name, size=40, color=C.accent }) {
+  const initials = name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+  return (
+    <div style={{width:size,height:size,borderRadius:'50%',background:`linear-gradient(135deg, ${color}, ${color}99)`,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:size*0.33,flexShrink:0,border:`2px solid ${color}33`}}>
+      {initials}
+    </div>
+  );
+}
+
+function Stars({ rating, small=false }) {
+  return (
+    <span style={{color:C.amber,fontSize:small?11:13,display:'inline-flex',alignItems:'center',gap:2}}>
+      {Array.from({length:5},(_,i)=><span key={i} style={{opacity:i<Math.floor(rating)?1:0.3}}>★</span>)}
+      <span style={{color:C.text2,fontWeight:600,fontSize:small?10:12,marginLeft:2}}>{rating}</span>
+    </span>
+  );
+}
+
+function Toggle({ on, onChange, color=C.green }) {
+  return (
+    <div onClick={onChange} style={{width:52,height:28,background:on?color:'#2C2C30',borderRadius:14,position:'relative',cursor:'pointer',transition:'background 0.3s',border:`1px solid ${on?color:C.border}`,flexShrink:0}}>
+      <div style={{position:'absolute',top:3,left:on?26:3,width:20,height:20,background:'white',borderRadius:'50%',transition:'left 0.25s cubic-bezier(.4,0,.2,1)',boxShadow:'0 2px 6px rgba(0,0,0,0.4)'}}/>
+    </div>
+  );
+}
+
+function Divider() { return <div style={{height:1,background:C.border,margin:'4px 0'}}/>; }
+
+// ─── BOTTOM NAV ───────────────────────────────────────────────────
+function BottomNav({ tabs, active, onChange, accentColor=C.accent }) {
+  return (
+    <div style={{display:'flex',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+      {tabs.map(t=>{
+        const isActive = active===t.id;
+        return (
+          <button key={t.id} onClick={()=>onChange(t.id)} style={{flex:1,background:'none',border:'none',color:isActive?accentColor:C.text2,padding:'9px 0 6px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:3,transition:'color 0.2s'}}>
+            <span style={{fontSize:20,lineHeight:1}}>{t.icon}</span>
+            <span style={{fontSize:9,fontWeight:700,letterSpacing:'0.4px',textTransform:'uppercase'}}>{t.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// USER / RIDER ROLE
+// ═══════════════════════════════════════════════════════════════════
+const userNavTabs = [
+  {id:'home',label:'Home',icon:'🏠'},
+  {id:'history',label:'Trips',icon:'📋'},
+  {id:'profile',label:'Profile',icon:'👤'},
+];
+
+function UserApp() {
+  const [screen, setScreen] = useState('home');
+  const [tab, setTab] = useState('home');
+  const goto = useCallback((s)=>{ setScreen(s); if(['home','history','profile'].includes(s)) setTab(s); },[]);
+  const showNav = !['search','tracking'].includes(screen);
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:C.bg,overflow:'hidden'}}>
+      <StatusBar/>
+      <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+        {screen==='home'     && <UserHome goto={goto}/>}
+        {screen==='search'   && <UserSearch goto={goto}/>}
+        {screen==='tracking' && <UserTracking goto={goto}/>}
+        {screen==='history'  && <UserHistory goto={goto}/>}
+        {screen==='profile'  && <UserProfile goto={goto}/>}
+      </div>
+      {showNav && <BottomNav tabs={userNavTabs} active={tab} onChange={goto}/>}
+      <HomeIndicator/>
+    </div>
+  );
+}
+
+function UserHome({ goto }) {
+  return (
+    <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column'}}>
+      {/* Map with overlay header */}
+      <div style={{height:260,position:'relative',flexShrink:0}}>
+        <MapSVG/>
+        <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom, rgba(11,11,13,0.85) 0%, transparent 55%, rgba(11,11,13,0.7) 100%)'}}/>
+        <div style={{position:'absolute',top:0,left:0,right:0,padding:'10px 18px',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+          <div>
+            <div style={{fontSize:12,color:'rgba(255,255,255,0.55)',fontWeight:500}}>Good morning</div>
+            <div style={{fontSize:21,fontWeight:700,color:'white',letterSpacing:'-0.4px'}}>Alex Johnson 👋</div>
+          </div>
+          <div style={{width:42,height:42,borderRadius:12,overflow:'hidden',border:'2px solid rgba(255,255,255,0.15)',flexShrink:0}}>
+            <img src="velocity-logo.jfif" alt="V" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+          </div>
+        </div>
+        {/* Search bar on map */}
+        <button onClick={()=>goto('search')} style={{position:'absolute',bottom:14,left:14,right:14,background:'rgba(20,20,22,0.95)',backdropFilter:'blur(12px)',border:`1px solid ${C.border2}`,borderRadius:14,padding:'13px 16px',color:C.text2,textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:10,fontSize:14,fontFamily:'Space Grotesk'}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Where are you going?
+          <span style={{marginLeft:'auto',fontSize:11,color:C.accent,fontWeight:600}}>→</span>
+        </button>
+      </div>
+
+      {/* Content */}
+      <div style={{flex:1,padding:'16px',display:'flex',flexDirection:'column',gap:14}}>
+        {/* Quick destinations */}
+        <div style={{display:'flex',gap:10}}>
+          {[{icon:'🏠',label:'Home',addr:'123 Oak Street'},{icon:'💼',label:'Work',addr:'Tech Hub, Downtown'}].map(p=>(
+            <button key={p.label} onClick={()=>goto('search')} style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:'12px',cursor:'pointer',textAlign:'left',fontFamily:'Space Grotesk',transition:'border-color 0.2s'}}>
+              <div style={{fontSize:22,marginBottom:5}}>{p.icon}</div>
+              <div style={{fontSize:13,fontWeight:700,color:C.text}}>{p.label}</div>
+              <div style={{fontSize:11,color:C.text2,marginTop:1}}>{p.addr}</div>
+            </button>
+          ))}
+          <button onClick={()=>goto('search')} style={{width:60,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:'12px 8px',cursor:'pointer',textAlign:'center',fontFamily:'Space Grotesk',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:4}}>
+            <span style={{fontSize:22}}>➕</span>
+            <span style={{fontSize:10,color:C.text2,fontWeight:600}}>New</span>
+          </button>
+        </div>
+
+        {/* Recent */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{fontSize:14,fontWeight:700,color:C.text}}>Recent places</span>
+          <span style={{fontSize:12,color:C.accent,fontWeight:600,cursor:'pointer'}}>See all</span>
+        </div>
+        {[
+          {icon:'🛍️',place:'Downtown Mall',dist:'2.4 km',time:'Yesterday'},
+          {icon:'✈️',place:'Airport Terminal 1',dist:'18.2 km',time:'Mon'},
+          {icon:'🏥',place:'City Hospital',dist:'5.7 km',time:'Sun'},
+        ].map(r=>(
+          <button key={r.place} onClick={()=>goto('search')} style={{display:'flex',alignItems:'center',gap:12,background:'none',border:'none',padding:'2px 0',cursor:'pointer',width:'100%',fontFamily:'Space Grotesk'}}>
+            <div style={{width:40,height:40,borderRadius:11,background:C.card2,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,flexShrink:0}}>{r.icon}</div>
+            <div style={{flex:1,textAlign:'left'}}>
+              <div style={{fontSize:14,fontWeight:600,color:C.text}}>{r.place}</div>
+              <div style={{fontSize:12,color:C.text2}}>{r.dist} • {r.time}</div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        ))}
+
+        {/* Promo */}
+        <div style={{background:`linear-gradient(135deg, ${C.accentDim}, ${C.purpleDim})`,border:`1px solid ${C.accentMid}`,borderRadius:16,padding:'14px 16px',display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontSize:30}}>🎁</span>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:C.text}}>First ride 20% off</div>
+            <div style={{fontSize:12,color:C.text2}}>Use code VELOCITY20 at checkout</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UserSearch({ goto }) {
+  const [sel, setSel] = useState(null);
+  const rides = [
+    {id:'economy', name:'Economy',     desc:'Affordable everyday rides', price:'$8.50',  eta:'4 min',  icon:'🚗', seats:4},
+    {id:'comfort', name:'Comfort',     desc:'Extra legroom & comfort',    price:'$13.20', eta:'6 min',  icon:'🚙', seats:4},
+    {id:'premium', name:'Premium',     desc:'Luxury vehicles',            price:'$22.00', eta:'8 min',  icon:'🏎️', seats:4},
+    {id:'xl',      name:'XL',          desc:'For groups up to 6',         price:'$18.50', eta:'10 min', icon:'🚐', seats:6},
+  ];
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="Book a Ride" onBack={()=>goto('home')}/>
+      {/* Location inputs */}
+      <div style={{padding:'0 16px 12px',flexShrink:0}}>
+        <div style={{background:C.card,borderRadius:16,overflow:'hidden',border:`1px solid ${C.border}`}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,padding:'11px 14px',borderBottom:`1px solid ${C.border}`}}>
+            <div style={{width:10,height:10,borderRadius:'50%',background:C.green,flexShrink:0,boxShadow:`0 0 8px ${C.green}`}}/>
+            <div>
+              <div style={{fontSize:10,color:C.text2,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase'}}>Pickup</div>
+              <div style={{fontSize:14,fontWeight:600,color:C.text}}>Current Location</div>
+            </div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:12,padding:'11px 14px'}}>
+            <div style={{width:10,height:10,borderRadius:3,background:C.red,flexShrink:0}}/>
+            <div>
+              <div style={{fontSize:10,color:C.text2,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase'}}>Drop-off</div>
+              <div style={{fontSize:14,fontWeight:600,color:C.text}}>Downtown Mall</div>
+            </div>
+          </div>
+        </div>
+        {/* Mini map */}
+        <div style={{height:110,borderRadius:14,overflow:'hidden',border:`1px solid ${C.border}`,marginTop:10}}>
+          <MapSVG showRoute compact/>
+        </div>
+        {/* Distance info */}
+        <div style={{display:'flex',gap:16,padding:'8px 4px',fontSize:12,color:C.text2}}>
+          <span>📍 2.4 km</span>
+          <span>⏱ ~12 min</span>
+          <span>🛣️ Via Oak Avenue</span>
+        </div>
+      </div>
+      {/* Ride options */}
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:8}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.text2,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:2}}>Choose a ride</div>
+        {rides.map(r=>{
+          const isSelected = sel===r.id;
+          return (
+            <div key={r.id} onClick={()=>setSel(r.id)} style={{background:C.card,borderRadius:14,padding:'13px 14px',border:`1.5px solid ${isSelected?C.accent:C.border}`,cursor:'pointer',display:'flex',alignItems:'center',gap:12,transition:'border-color 0.2s',boxShadow:isSelected?`0 0 16px ${C.accentDim}`:'none'}}>
+              <span style={{fontSize:30,flexShrink:0}}>{r.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:700,color:C.text}}>{r.name} <span style={{fontSize:12,fontWeight:400,color:C.text2}}>· {r.eta}</span></div>
+                <div style={{fontSize:12,color:C.text2,marginTop:1}}>{r.desc} · {r.seats} seats</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:16,fontWeight:700,color:isSelected?C.accent:C.text}}>{r.price}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {/* Book button */}
+      <div style={{padding:'12px 16px',flexShrink:0}}>
+        <button onClick={()=>sel&&goto('tracking')} style={{width:'100%',background:sel?C.accent:'#252528',color:sel?'white':C.text2,border:'none',borderRadius:14,padding:'16px',fontSize:15,fontWeight:700,cursor:sel?'pointer':'not-allowed',transition:'all 0.2s',fontFamily:'Space Grotesk'}}>
+          {sel ? `Book ${rides.find(r=>r.id===sel)?.name} — ${rides.find(r=>r.id===sel)?.price}` : 'Select a ride type'}
+        </button>
+      </div>
+      <HomeIndicator/>
+    </div>
+  );
+}
+
+function UserTracking({ goto }) {
+  const [phase, setPhase] = useState('searching');
+  const [driverY, setDriverY] = useState(200);
+  useEffect(()=>{
+    const t1 = setTimeout(()=>setPhase('matched'), 2200);
+    const t2 = setTimeout(()=>{ setPhase('enroute'); setDriverY(165); }, 5000);
+    const t3 = setTimeout(()=>{ setPhase('arrived'); setDriverY(140); }, 11000);
+    return()=>{ clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  },[]);
+  const phaseColor = { searching:C.accent, matched:C.accent, enroute:C.amber, arrived:C.green };
+  const phaseLabel = { searching:'Finding driver\u2026', matched:'Driver found!', enroute:'On the way', arrived:'You\u2019ve arrived!' };
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div style={{flex:1,position:'relative'}}>
+        <MapSVG showRoute showDriver={phase!=='searching'} driverX={195} driverY={driverY}/>
+        {/* Cancel */}
+        <button onClick={()=>goto('home')} style={{position:'absolute',top:12,left:12,background:'rgba(20,20,22,0.9)',backdropFilter:'blur(10px)',border:`1px solid ${C.border}`,borderRadius:12,padding:'8px 14px',color:C.text,cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'Space Grotesk'}}>✕ Cancel</button>
+        {/* Status chip */}
+        <div style={{position:'absolute',top:12,right:12,background:'rgba(20,20,22,0.9)',backdropFilter:'blur(10px)',borderRadius:12,padding:'8px 14px',border:`1px solid ${phaseColor[phase]}44`,display:'flex',alignItems:'center',gap:6}}>
+          {phase==='searching' && <div style={{width:8,height:8,borderRadius:'50%',background:C.accent,animation:'pulse 1s ease-in-out infinite'}}/>}
+          <span style={{fontSize:12,fontWeight:700,color:phaseColor[phase]}}>{phaseLabel[phase]}</span>
+        </div>
+        {/* Searching overlay */}
+        {phase==='searching' && (
+          <div style={{position:'absolute',inset:0,background:'rgba(11,11,13,0.55)',display:'flex',alignItems:'center',justifyContent:'center',animation:'fadeIn 0.3s ease'}}>
+            <div style={{textAlign:'center'}}>
+              <div style={{fontSize:40,animation:'spin 2s linear infinite',display:'inline-block',marginBottom:12}}>⏳</div>
+              <div style={{fontSize:16,fontWeight:700,color:'white'}}>Finding nearby drivers…</div>
+              <div style={{fontSize:12,color:'rgba(255,255,255,0.5)',marginTop:4}}>Usually takes 10–30 seconds</div>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Bottom sheet */}
+      {phase!=='searching' && (
+        <div style={{background:C.surface,borderRadius:'22px 22px 0 0',padding:'16px 16px 0',border:`1px solid ${C.border}`,animation:'slideUp 0.3s ease',flexShrink:0}}>
+          <div style={{width:44,height:4,background:C.border2,borderRadius:2,margin:'0 auto 16px'}}/>
+          {phase!=='arrived' ? <>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+              <Avatar name="Marcus Thompson" size={52} color="#6366F1"/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:17,fontWeight:700,color:C.text,letterSpacing:'-0.3px'}}>Marcus Thompson</div>
+                <Stars rating={4.9}/>
+                <div style={{fontSize:12,color:C.text2,marginTop:2}}>Toyota Camry · <span style={{fontWeight:600,color:C.text}}>ABC-1234</span></div>
+              </div>
+              <div style={{background:C.accentDim,borderRadius:12,padding:'10px 14px',textAlign:'center',border:`1px solid ${C.accentMid}`}}>
+                <div style={{fontSize:22,fontWeight:800,color:C.accent}}>4</div>
+                <div style={{fontSize:9,color:C.accent,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.4px'}}>min ETA</div>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:8,paddingBottom:16}}>
+              {[['📱','Call'],['💬','Message'],['🛡️','Safety']].map(([ic,lb],i)=>(
+                <button key={lb} style={{flex:1,background:i===2?C.accentDim:C.card2,border:`1px solid ${i===2?C.accentMid:C.border}`,borderRadius:12,padding:'11px',color:i===2?C.accent:C.text,cursor:'pointer',fontFamily:'Space Grotesk',fontSize:12,fontWeight:700,display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                  <span style={{fontSize:18}}>{ic}</span>{lb}
+                </button>
+              ))}
+            </div>
+          </> : (
+            <div style={{textAlign:'center',padding:'8px 0 20px'}}>
+              <div style={{fontSize:44,marginBottom:8}}>🎉</div>
+              <div style={{fontSize:21,fontWeight:700,color:C.text,marginBottom:4}}>You've arrived!</div>
+              <div style={{fontSize:13,color:C.text2,marginBottom:16}}>Downtown Mall · $13.20 · 2.4 km · 14 min</div>
+              <div style={{display:'flex',gap:4,justifyContent:'center',marginBottom:16}}>
+                {[1,2,3,4,5].map(s=><button key={s} style={{fontSize:30,background:'none',border:'none',cursor:'pointer',color:C.amber}}>★</button>)}
+              </div>
+              <button onClick={()=>goto('home')} style={{background:C.accent,border:'none',borderRadius:14,padding:'14px 40px',color:'white',fontWeight:700,fontSize:15,cursor:'pointer',fontFamily:'Space Grotesk'}}>Done</button>
+            </div>
+          )}
+        </div>
+      )}
+      <HomeIndicator/>
+    </div>
+  );
+}
+
+function UserHistory({ goto }) {
+  const trips = [
+    {icon:'🛍️',dest:'Downtown Mall',date:'Today, 10:24 AM',price:'$13.20',km:'2.4 km',status:'completed',driver:'Marcus T.'},
+    {icon:'✈️',dest:'Airport Terminal 1',date:'Mon, 7:05 AM',price:'$42.50',km:'18.2 km',status:'completed',driver:'Sarah K.'},
+    {icon:'🏥',dest:'City Hospital',date:'Sun, 3:20 PM',price:'$18.70',km:'5.7 km',status:'completed',driver:'James R.'},
+    {icon:'💼',dest:'Tech Hub Office',date:'Fri, 9:00 AM',price:'$9.80',km:'3.1 km',status:'cancelled',driver:'—'},
+    {icon:'🏨',dest:'Grand Hotel',date:'Thu, 11:45 PM',price:'$22.00',km:'7.3 km',status:'completed',driver:'Emma L.'},
+  ];
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="My Trips" right={<span style={{fontSize:12,color:C.text2,fontWeight:600}}>47 total</span>}/>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:10}}>
+        {trips.map((t,i)=>(
+          <Card key={i} style={{display:'flex',gap:12,alignItems:'center',padding:'12px 14px'}}>
+            <div style={{width:44,height:44,borderRadius:13,background:t.status==='cancelled'?C.redDim:C.accentDim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0,border:`1px solid ${t.status==='cancelled'?C.red+'33':C.accent+'33'}`}}>{t.icon}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.dest}</div>
+              <div style={{fontSize:11,color:C.text2,marginTop:2}}>{t.date}</div>
+              <div style={{fontSize:11,color:C.text2}}>{t.km} · {t.driver}</div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0}}>
+              <div style={{fontSize:14,fontWeight:700,color:t.status==='cancelled'?C.red:C.text,marginBottom:4}}>{t.price}</div>
+              <Badge color={t.status==='cancelled'?'red':'green'}>{t.status}</Badge>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function UserProfile({ goto }) {
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="Profile"/>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:12}}>
+        <Card style={{display:'flex',alignItems:'center',gap:16,padding:'18px'}}>
+          <Avatar name="Alex Johnson" size={66} color={C.accent}/>
+          <div>
+            <div style={{fontSize:19,fontWeight:700,color:C.text,letterSpacing:'-0.3px'}}>Alex Johnson</div>
+            <Stars rating={4.8}/>
+            <div style={{fontSize:12,color:C.text2,marginTop:3}}>alex.johnson@email.com</div>
+          </div>
+        </Card>
+        <div style={{display:'flex',gap:8}}>
+          {[{label:'Total Trips',val:'47'},{label:'This Month',val:'12'},{label:'Saved',val:'$28'}].map(s=>(
+            <Card key={s.label} style={{flex:1,textAlign:'center',padding:'14px 6px'}}>
+              <div style={{fontSize:21,fontWeight:700,color:C.accent}}>{s.val}</div>
+              <div style={{fontSize:10,color:C.text2,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.4px',marginTop:3}}>{s.label}</div>
+            </Card>
+          ))}
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:C.text2,textTransform:'uppercase',letterSpacing:'0.5px',marginTop:2}}>Payment Methods</div>
+        {[{icon:'💳',label:'Visa •••• 4242',sub:'Default',isDefault:true},{icon:'📱',label:'Apple Pay',sub:'Added',isDefault:false}].map(p=>(
+          <Card key={p.label} style={{display:'flex',alignItems:'center',gap:12}}>
+            <span style={{fontSize:24}}>{p.icon}</span>
+            <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>{p.label}</div><div style={{fontSize:12,color:C.text2}}>{p.sub}</div></div>
+            {p.isDefault && <Badge color="blue">Default</Badge>}
+          </Card>
+        ))}
+        <div style={{fontSize:12,fontWeight:700,color:C.text2,textTransform:'uppercase',letterSpacing:'0.5px',marginTop:2}}>Settings</div>
+        {['Notifications','Privacy & Safety','Help & Support','Refer a Friend','About Velocity'].map(s=>(
+          <Card key={s} style={{display:'flex',alignItems:'center',padding:'14px 16px'}}>
+            <span style={{flex:1,fontSize:14,fontWeight:500,color:C.text}}>{s}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.text2} strokeWidth="2" strokeLinecap="round"><path d="m9 18 6-6-6-6"/></svg>
+          </Card>
+        ))}
+        <div style={{height:8}}/>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DRIVER ROLE
+// ═══════════════════════════════════════════════════════════════════
+const driverNavTabs = [
+  {id:'home',label:'Dashboard',icon:'🚗'},
+  {id:'earnings',label:'Earnings',icon:'💰'},
+  {id:'history',label:'Trips',icon:'📋'},
+  {id:'profile',label:'Profile',icon:'👤'},
+];
+
+function DriverApp() {
+  const [screen, setScreen] = useState('home');
+  const [tab, setTab] = useState('home');
+  const [online, setOnline] = useState(false);
+  const [request, setRequest] = useState(null);
+
+  const goto = useCallback((s)=>{ setScreen(s); if(['home','earnings','history','profile'].includes(s)) setTab(s); },[]);
+
+  useEffect(()=>{
+    if(online && screen==='home' && !request) {
+      const t = setTimeout(()=>setRequest({
+        id:'R-4921', rider:'Alex Johnson', from:'Current Location', to:'Downtown Mall',
+        fare:'$13.20', eta:'4 min', dist:'2.4 km',
+      }), 3500);
+      return ()=>clearTimeout(t);
+    }
+  },[online, screen]);
+
+  const acceptRide = ()=>{ setRequest(null); goto('navigation'); };
+  const declineRide = ()=>{ setRequest(null); };
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:C.bg,overflow:'hidden'}}>
+      <StatusBar/>
+      <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+        {screen==='home'       && <DriverDashboard online={online} setOnline={setOnline} request={request} onAccept={acceptRide} onDecline={declineRide}/>}
+        {screen==='navigation' && <DriverNavigation goto={goto}/>}
+        {screen==='earnings'   && <DriverEarnings/>}
+        {screen==='history'    && <DriverTripHistory/>}
+        {screen==='profile'    && <DriverProfile/>}
+      </div>
+      {screen!=='navigation' && <BottomNav tabs={driverNavTabs} active={tab} onChange={goto} accentColor={C.green}/>}
+      <HomeIndicator/>
+    </div>
+  );
+}
+
+function DriverDashboard({ online, setOnline, request, onAccept, onDecline }) {
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      {/* Header */}
+      <div style={{padding:'6px 18px 10px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+        <div>
+          <div style={{fontSize:12,color:C.text2,fontWeight:500}}>Welcome back,</div>
+          <div style={{fontSize:20,fontWeight:700,color:C.text,letterSpacing:'-0.3px'}}>Marcus T. 🚗</div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:12,fontWeight:700,color:online?C.green:C.text2}}>{online?'Online':'Offline'}</span>
+          <Toggle on={online} onChange={()=>setOnline(!online)} color={C.green}/>
+        </div>
+      </div>
+      {/* Map */}
+      <div style={{height:220,position:'relative',flexShrink:0}}>
+        <MapSVG showDriver driverX={195} driverY={140}/>
+        {!online && (
+          <div style={{position:'absolute',inset:0,background:'rgba(11,11,13,0.72)',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:8}}>
+            <div style={{fontSize:28}}>🌙</div>
+            <div style={{fontSize:13,fontWeight:700,color:C.text2}}>You're offline</div>
+            <div style={{fontSize:11,color:C.text3}}>Toggle online to receive ride requests</div>
+          </div>
+        )}
+        {online && (
+          <div style={{position:'absolute',bottom:12,right:12,background:'rgba(20,20,22,0.92)',backdropFilter:'blur(10px)',borderRadius:10,padding:'6px 12px',border:`1px solid ${C.green}44`}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <div style={{width:7,height:7,borderRadius:'50%',background:C.green,animation:'pulse 1.5s ease-in-out infinite'}}/>
+              <span style={{fontSize:11,fontWeight:700,color:C.green}}>Available for rides</span>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Stats + request */}
+      <div style={{flex:1,overflowY:'auto',padding:'14px 16px',display:'flex',flexDirection:'column',gap:10}}>
+        {/* Today earnings */}
+        <div style={{display:'flex',gap:10}}>
+          <Card style={{flex:1,padding:'13px'}}>
+            <div style={{fontSize:11,color:C.text2,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.4px'}}>Today</div>
+            <div style={{fontSize:22,fontWeight:700,color:C.green,marginTop:2}}>$124.50</div>
+            <div style={{fontSize:11,color:C.text2}}>8 trips completed</div>
+          </Card>
+          <Card style={{flex:1,padding:'13px'}}>
+            <div style={{fontSize:11,color:C.text2,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.4px'}}>This Week</div>
+            <div style={{fontSize:22,fontWeight:700,color:C.green,marginTop:2}}>$892.20</div>
+            <div style={{fontSize:11,color:C.text2}}>47 trips completed</div>
+          </Card>
+        </div>
+        {/* Metrics */}
+        <div style={{display:'flex',gap:10}}>
+          {[{icon:'⭐',val:'4.9',label:'Rating'},{icon:'✅',val:'92%',label:'Acceptance'},{icon:'🛣️',val:'340km',label:'Today'}].map(s=>(
+            <Card key={s.label} style={{flex:1,textAlign:'center',padding:'11px 6px'}}>
+              <div style={{fontSize:18}}>{s.icon}</div>
+              <div style={{fontSize:15,fontWeight:700,color:C.text,marginTop:3}}>{s.val}</div>
+              <div style={{fontSize:10,color:C.text2}}>{s.label}</div>
+            </Card>
+          ))}
+        </div>
+        {/* Ride request card */}
+        {request && (
+          <div style={{background:C.card,borderRadius:18,padding:'16px',border:`2px solid ${C.accent}`,boxShadow:`0 0 30px ${C.accentDim}`,animation:'slideUp 0.3s ease'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.text}}>New Ride Request</div>
+              <Badge color="blue" dot>Live</Badge>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:12}}>
+              <div style={{display:'flex',gap:8,alignItems:'center',fontSize:13}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:C.green,flexShrink:0}}/>
+                <span style={{color:C.text2,minWidth:50}}>Pickup</span>
+                <span style={{fontWeight:700,color:C.text}}>{request.from}</span>
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center',fontSize:13}}>
+                <div style={{width:8,height:8,borderRadius:2,background:C.red,flexShrink:0}}/>
+                <span style={{color:C.text2,minWidth:50}}>Drop-off</span>
+                <span style={{fontWeight:700,color:C.text}}>{request.to}</span>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:16,fontSize:12,color:C.text2,marginBottom:14,paddingBottom:12,borderBottom:`1px solid ${C.border}`}}>
+              <span>💰 <strong style={{color:C.green}}>{request.fare}</strong></span>
+              <span>📍 <strong style={{color:C.text}}>{request.dist}</strong></span>
+              <span>⏱ <strong style={{color:C.text}}>{request.eta}</strong></span>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={onDecline} style={{flex:1,background:C.redDim,border:`1px solid ${C.red}44`,borderRadius:13,padding:'13px',color:C.red,cursor:'pointer',fontWeight:700,fontFamily:'Space Grotesk',fontSize:14}}>Decline</button>
+              <button onClick={onAccept} style={{flex:2,background:C.green,border:'none',borderRadius:13,padding:'13px',color:'#000',cursor:'pointer',fontWeight:700,fontFamily:'Space Grotesk',fontSize:14}}>✓ Accept Ride</button>
+            </div>
+          </div>
+        )}
+        {online && !request && (
+          <div style={{textAlign:'center',padding:'20px 0',color:C.text2,fontSize:13,fontWeight:500}}>
+            <div style={{fontSize:28,marginBottom:8,animation:'pulse 2s ease-in-out infinite'}}>📡</div>
+            Waiting for ride requests…
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DriverNavigation({ goto }) {
+  const [phase, setPhase] = useState('pickup');
+  useEffect(()=>{ const t=setTimeout(()=>setPhase('dropoff'),7000); return()=>clearTimeout(t); },[]);
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div style={{flex:1,position:'relative'}}>
+        <MapSVG showRoute showDriver driverX={195} driverY={phase==='pickup'?165:110}/>
+        <div style={{position:'absolute',top:12,left:12,right:12,background:'rgba(20,20,22,0.93)',backdropFilter:'blur(12px)',borderRadius:14,padding:'12px 14px',border:`1px solid ${C.border}`}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.text2,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:2}}>{phase==='pickup'?'HEADING TO PICKUP':'HEADING TO DESTINATION'}</div>
+          <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:2}}>{phase==='pickup'?'Current Location':'Downtown Mall'}</div>
+          <div style={{fontSize:12,color:C.accent,fontWeight:600}}>Turn right on Oak Ave in 200m</div>
+        </div>
+      </div>
+      <div style={{background:C.surface,borderRadius:'22px 22px 0 0',padding:'14px 16px 0',border:`1px solid ${C.border}`,flexShrink:0,animation:'slideUp 0.3s ease'}}>
+        <div style={{width:44,height:4,background:C.border2,borderRadius:2,margin:'0 auto 14px'}}/>
+        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+          <Avatar name="Alex Johnson" size={48} color={C.accent}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:16,fontWeight:700,color:C.text}}>Alex Johnson</div>
+            <Stars rating={4.8}/>
+          </div>
+          <div style={{fontSize:20,fontWeight:700,color:C.green}}>$13.20</div>
+        </div>
+        <div style={{display:'flex',gap:8,paddingBottom:14}}>
+          {[['📱','Call'],['💬','Message']].map(([ic,lb])=>(
+            <button key={lb} style={{flex:1,background:C.card2,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px',color:C.text,cursor:'pointer',fontFamily:'Space Grotesk',fontSize:13,fontWeight:600}}>{ic} {lb}</button>
+          ))}
+          <button onClick={()=>goto('home')} style={{flex:2,background:C.red,border:'none',borderRadius:12,padding:'11px',color:'white',cursor:'pointer',fontFamily:'Space Grotesk',fontSize:13,fontWeight:700}}>End Trip</button>
+        </div>
+      </div>
+      <HomeIndicator/>
+    </div>
+  );
+}
+
+function DriverEarnings() {
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const vals=[85,120,95,140,160,210,124];
+  const maxV=Math.max(...vals);
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="Earnings"/>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:12}}>
+        <Card style={{textAlign:'center',padding:'22px',background:`linear-gradient(135deg, ${C.greenDim}, rgba(34,197,94,0.06))`}}>
+          <div style={{fontSize:38,fontWeight:800,color:C.green,letterSpacing:'-1px'}}>$892.20</div>
+          <div style={{fontSize:13,color:C.text2,marginTop:4}}>This week · 47 trips</div>
+        </Card>
+        <Card>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:14}}>Daily Breakdown</div>
+          <div style={{display:'flex',gap:5,alignItems:'flex-end',height:110}}>
+            {days.map((d,i)=>(
+              <div key={d} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
+                <div style={{fontSize:9,color:i===6?C.green:C.accent,fontWeight:700}}>${vals[i]}</div>
+                <div style={{width:'100%',background:i===6?C.green:C.accentDim,borderRadius:'5px 5px 0 0',height:Math.max((vals[i]/maxV)*90,6),border:`1px solid ${i===6?C.green:C.accent}44`,transition:'height 0.5s ease'}}/>
+                <div style={{fontSize:9,color:C.text2,fontWeight:600}}>{d}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <div style={{display:'flex',gap:8}}>
+          {[{label:'Avg/Trip',val:'$18.98'},{label:'Online Hrs',val:'38h'},{label:'Top Day',val:'Sat'}].map(s=>(
+            <Card key={s.label} style={{flex:1,textAlign:'center',padding:'13px 6px'}}>
+              <div style={{fontSize:16,fontWeight:700,color:C.text}}>{s.val}</div>
+              <div style={{fontSize:10,color:C.text2,marginTop:2}}>{s.label}</div>
+            </Card>
+          ))}
+        </div>
+        <Card>
+          {[{label:'Base fares',val:'$748.20'},{label:'Tips received',val:'$98.00'},{label:'Bonuses',val:'$46.00'},{label:'Total gross',val:'$892.20',accent:true}].map(r=>(
+            <div key={r.label} style={{display:'flex',justifyContent:'space-between',padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
+              <span style={{fontSize:13,color:C.text2}}>{r.label}</span>
+              <span style={{fontSize:13,fontWeight:700,color:r.accent?C.green:C.text}}>{r.val}</span>
+            </div>
+          ))}
+        </Card>
+        <div style={{height:8}}/>
+      </div>
+    </div>
+  );
+}
+
+function DriverTripHistory() {
+  const trips=[
+    {dest:'Downtown Mall',date:'Today, 10:24 AM',fare:'$13.20',rating:5,rider:'Alex J.'},
+    {dest:'Airport T1',date:'Today, 7:05 AM',fare:'$42.50',rating:5,rider:'Sarah M.'},
+    {dest:'City Hospital',date:'Yesterday, 3:20 PM',fare:'$18.70',rating:4,rider:'Tom B.'},
+    {dest:'Tech Hub',date:'Mon, 9:00 AM',fare:'$9.80',rating:5,rider:'Chris L.'},
+    {dest:'Grand Hotel',date:'Sun, 11:45 PM',fare:'$22.00',rating:5,rider:'Emma W.'},
+  ];
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="Trip History" right={<span style={{fontSize:12,color:C.text2}}>1,247 total</span>}/>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:10}}>
+        {trips.map((t,i)=>(
+          <Card key={i} style={{display:'flex',gap:12,alignItems:'center',padding:'12px 14px'}}>
+            <div style={{width:42,height:42,borderRadius:12,background:C.greenDim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,border:`1px solid ${C.green}33`}}>🚗</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:700,color:C.text}}>{t.dest}</div>
+              <div style={{fontSize:11,color:C.text2,marginTop:1}}>{t.date} · {t.rider}</div>
+              <Stars rating={t.rating} small/>
+            </div>
+            <div style={{fontSize:15,fontWeight:700,color:C.green,flexShrink:0}}>{t.fare}</div>
+          </Card>
+        ))}
+        <div style={{height:8}}/>
+      </div>
+    </div>
+  );
+}
+
+function DriverProfile() {
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="My Profile"/>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:12}}>
+        <Card style={{display:'flex',alignItems:'center',gap:16,padding:'18px'}}>
+          <Avatar name="Marcus Thompson" size={66} color="#6366F1"/>
+          <div>
+            <div style={{fontSize:19,fontWeight:700,color:C.text}}>Marcus Thompson</div>
+            <Stars rating={4.9}/>
+            <div style={{fontSize:12,color:C.text2,marginTop:3}}>Driver ID: VEL-4892 · Since 2022</div>
+          </div>
+        </Card>
+        <div style={{display:'flex',gap:8}}>
+          {[{label:'Total Trips',val:'1,247'},{label:'Rating',val:'4.9★'},{label:'Acceptance',val:'92%'}].map(s=>(
+            <Card key={s.label} style={{flex:1,textAlign:'center',padding:'12px 6px'}}>
+              <div style={{fontSize:16,fontWeight:700,color:C.green}}>{s.val}</div>
+              <div style={{fontSize:10,color:C.text2,marginTop:2}}>{s.label}</div>
+            </Card>
+          ))}
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:C.text2,textTransform:'uppercase',letterSpacing:'0.5px',marginTop:2}}>Vehicle</div>
+        <Card>
+          {[['Make & Model','Toyota Camry 2022'],['Color','Silver'],['Plate No.','ABC-1234'],['Insurance','Valid until Dec 2025'],['Inspection','Passed · Jan 2025']].map(([k,v])=>(
+            <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'9px 0',borderBottom:`1px solid ${C.border}`}}>
+              <span style={{fontSize:12,color:C.text2}}>{k}</span>
+              <span style={{fontSize:12,fontWeight:600,color:C.text}}>{v}</span>
+            </div>
+          ))}
+        </Card>
+        {['Documents & Verification','Payout Settings','Notifications','Help & Support','Log Out'].map(s=>(
+          <Card key={s} style={{display:'flex',alignItems:'center',padding:'14px 16px'}}>
+            <span style={{flex:1,fontSize:14,fontWeight:500,color:s==='Log Out'?C.red:C.text}}>{s}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.text2} strokeWidth="2" strokeLinecap="round"><path d="m9 18 6-6-6-6"/></svg>
+          </Card>
+        ))}
+        <div style={{height:8}}/>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ADMIN ROLE
+// ═══════════════════════════════════════════════════════════════════
+const adminNavTabs = [
+  {id:'home',     label:'Overview', icon:'📊'},
+  {id:'users',    label:'Users',    icon:'👥'},
+  {id:'drivers',  label:'Drivers',  icon:'🚗'},
+  {id:'rides',    label:'Rides',    icon:'🗺️'},
+  {id:'analytics',label:'Analytics',icon:'📈'},
+];
+
+function AdminApp() {
+  const [screen, setScreen] = useState('home');
+  const [tab, setTab]   = useState('home');
+  const goto = useCallback((s)=>{ setScreen(s); if(adminNavTabs.find(t=>t.id===s)) setTab(s); },[]);
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:C.bg,overflow:'hidden'}}>
+      <StatusBar/>
+      {/* Admin topbar */}
+      <div style={{display:'flex',alignItems:'center',padding:'4px 16px 10px',gap:10,borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+        <div style={{width:30,height:30,borderRadius:8,overflow:'hidden',border:`1px solid ${C.border}`,flexShrink:0}}>
+          <img src="velocity-logo.jfif" alt="V" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+        </div>
+        <span style={{fontSize:14,fontWeight:700,color:C.text,flex:1,letterSpacing:'-0.2px'}}>Admin Console</span>
+        <Badge color="red" dot>Live</Badge>
+        <button onClick={()=>goto('settings')} style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:9,padding:'6px 10px',color:C.text2,cursor:'pointer',fontSize:16}}>⚙️</button>
+      </div>
+      <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+        {screen==='home'      && <AdminOverview goto={goto}/>}
+        {screen==='users'     && <AdminUsers/>}
+        {screen==='drivers'   && <AdminDrivers/>}
+        {screen==='rides'     && <AdminRides/>}
+        {screen==='analytics' && <AdminAnalytics/>}
+        {screen==='settings'  && <AdminSettings goto={goto}/>}
+      </div>
+      {screen!=='settings' && <BottomNav tabs={adminNavTabs} active={tab} onChange={goto} accentColor={C.amber}/>}
+      <HomeIndicator/>
+    </div>
+  );
+}
+
+function StatTile({ icon, label, val, sub, color=C.accent, onClick }) {
+  return (
+    <Card style={{flex:1,padding:'12px 10px',textAlign:'center'}} onClick={onClick}>
+      <div style={{fontSize:22,marginBottom:4}}>{icon}</div>
+      <div style={{fontSize:20,fontWeight:800,color,letterSpacing:'-0.5px'}}>{val}</div>
+      <div style={{fontSize:11,fontWeight:600,color:C.text,marginTop:2}}>{label}</div>
+      {sub && <div style={{fontSize:10,color:C.text2,marginTop:1}}>{sub}</div>}
+    </Card>
+  );
+}
+
+function AdminOverview({ goto }) {
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="Overview" right={<span style={{fontSize:11,color:C.text2}}>Apr 26, 2026</span>}/>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:12}}>
+        {/* KPIs */}
+        <div style={{display:'flex',gap:8}}>
+          <StatTile icon="🛣️" label="Total Rides" val="2,847" sub="+12% today" color={C.accent} onClick={()=>goto('rides')}/>
+          <StatTile icon="💰" label="Revenue" val="$48.2K" sub="+8% today" color={C.green}/>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <StatTile icon="👥" label="Users" val="12.4K" sub="1,204 new" color={C.amber} onClick={()=>goto('users')}/>
+          <StatTile icon="🚗" label="Drivers" val="843" sub="of 1,200 total" color={C.purple} onClick={()=>goto('drivers')}/>
+        </div>
+        {/* Live map mini */}
+        <Card style={{padding:0,overflow:'hidden'}}>
+          <div style={{padding:'10px 14px 8px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:13,fontWeight:700}}>Live Map</span>
+            <Badge color="green" dot>2,847 active</Badge>
+          </div>
+          <div style={{height:120}}>
+            <MapSVG showDriver driverX={130} driverY={120} compact/>
+          </div>
+        </Card>
+        {/* Live rides feed */}
+        <div style={{fontSize:13,fontWeight:700,color:C.text}}>Live Rides</div>
+        {[
+          {id:'R-4921',from:'Airport',to:'Downtown',status:'in_progress',driver:'Marcus T.',fare:'$42.50'},
+          {id:'R-4920',from:'City Mall',to:'Hospital',status:'matching',driver:'Searching…',fare:'$18.20'},
+          {id:'R-4919',from:'Station',to:'Tech Hub',status:'in_progress',driver:'Sarah K.',fare:'$9.80'},
+        ].map(r=>(
+          <Card key={r.id} style={{padding:'11px 14px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+              <span style={{fontSize:12,fontWeight:700,color:C.accent}}>{r.id}</span>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <span style={{fontSize:12,fontWeight:700,color:C.text}}>{r.fare}</span>
+                <Badge color={r.status==='in_progress'?'green':'amber'}>{r.status==='in_progress'?'Active':'Matching'}</Badge>
+              </div>
+            </div>
+            <div style={{fontSize:12,color:C.text2}}>{r.from} → {r.to}</div>
+            <div style={{fontSize:12,color:C.text2,marginTop:2}}>Driver: <span style={{color:C.text,fontWeight:600}}>{r.driver}</span></div>
+          </Card>
+        ))}
+        <div style={{height:8}}/>
+      </div>
+    </div>
+  );
+}
+
+function AdminUsers() {
+  const users=[
+    {name:'Alex Johnson',email:'alex@email.com',trips:47,joined:'Jan 2024',status:'active'},
+    {name:'Sarah Miller',email:'sarah@email.com',trips:124,joined:'Mar 2023',status:'active'},
+    {name:'Tom Brown',email:'tom@email.com',trips:8,joined:'Nov 2024',status:'suspended'},
+    {name:'Emma Wilson',email:'emma@email.com',trips:231,joined:'Jun 2022',status:'active'},
+    {name:'Chris Lee',email:'chris@email.com',trips:15,joined:'Feb 2025',status:'active'},
+    {name:'Diana Park',email:'diana@email.com',trips:89,joined:'Sep 2023',status:'active'},
+  ];
+  const colors = ['blue','purple','red','green','blue','amber'];
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="Users" right={<Badge color="blue">{users.length} shown</Badge>}/>
+      <div style={{padding:'0 16px 10px',flexShrink:0}}>
+        <div style={{background:C.card,borderRadius:12,padding:'10px 14px',display:'flex',gap:8,alignItems:'center',border:`1px solid ${C.border}`}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.text2} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <span style={{fontSize:13,color:C.text2}}>Search users…</span>
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:9}}>
+        {users.map((u,i)=>(
+          <Card key={i} style={{display:'flex',gap:11,alignItems:'center',padding:'11px 13px'}}>
+            <Avatar name={u.name} size={40} color={u.status==='suspended'?C.red:C.accent}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.text}}>{u.name}</div>
+              <div style={{fontSize:11,color:C.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{u.email}</div>
+              <div style={{fontSize:10,color:C.text2}}>{u.trips} trips · Joined {u.joined}</div>
+            </div>
+            <Badge color={u.status==='suspended'?'red':'green'}>{u.status}</Badge>
+          </Card>
+        ))}
+        <div style={{height:8}}/>
+      </div>
+    </div>
+  );
+}
+
+function AdminDrivers() {
+  const drivers=[
+    {name:'Marcus Thompson',rating:4.9,trips:1247,status:'online',weekly:'$892'},
+    {name:'Sarah Kim',rating:4.8,trips:892,status:'busy',weekly:'$641'},
+    {name:'James Rodriguez',rating:4.7,trips:534,status:'offline',weekly:'$380'},
+    {name:'Emma Liu',rating:4.9,trips:2103,status:'online',weekly:'$1,204'},
+    {name:'David Park',rating:4.6,trips:301,status:'offline',weekly:'$214'},
+    {name:'Priya Sharma',rating:4.8,trips:678,status:'online',weekly:'$720'},
+  ];
+  const sc = {online:'green',busy:'amber',offline:'red'};
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="Drivers" right={<Badge color="green" dot>843 Online</Badge>}/>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:9}}>
+        {drivers.map((d,i)=>(
+          <Card key={i} style={{display:'flex',gap:11,alignItems:'center',padding:'11px 13px'}}>
+            <Avatar name={d.name} size={40} color="#6366F1"/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.text}}>{d.name}</div>
+              <div style={{fontSize:10,color:C.text2,marginTop:1}}>{d.trips} trips · ⭐{d.rating} · {d.weekly}/wk</div>
+            </div>
+            <Badge color={sc[d.status]} dot>{d.status}</Badge>
+          </Card>
+        ))}
+        <div style={{height:8}}/>
+      </div>
+    </div>
+  );
+}
+
+function AdminRides() {
+  const rides=[
+    {id:'R-4921',rider:'Alex J.',driver:'Marcus T.',from:'Airport',to:'Downtown',fare:'$42.50',status:'in_progress'},
+    {id:'R-4920',rider:'Sarah M.',driver:'Searching',from:'City Mall',to:'Hospital',fare:'$18.20',status:'matching'},
+    {id:'R-4919',rider:'Tom B.',driver:'Emma L.',from:'Station',to:'Tech Hub',fare:'$9.80',status:'completed'},
+    {id:'R-4918',rider:'Chris L.',driver:'James R.',from:'Hotel',to:'Airport',fare:'$38.00',status:'cancelled'},
+    {id:'R-4917',rider:'Diana P.',driver:'Sarah K.',from:'Park',to:'Museum',fare:'$11.40',status:'in_progress'},
+  ];
+  const sc = {in_progress:'blue',matching:'amber',completed:'green',cancelled:'red'};
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="Ride Monitor" right={<Badge color="blue">{rides.length} shown</Badge>}/>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:9}}>
+        {rides.map((r,i)=>(
+          <Card key={i} style={{padding:'12px 14px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+              <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{r.id}</span>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <span style={{fontSize:13,fontWeight:700,color:C.text}}>{r.fare}</span>
+                <Badge color={sc[r.status]}>{r.status.replace('_',' ')}</Badge>
+              </div>
+            </div>
+            <div style={{fontSize:12,color:C.text2,marginBottom:3}}>{r.from} → {r.to}</div>
+            <div style={{fontSize:12,color:C.text2}}>Rider: <strong style={{color:C.text}}>{r.rider}</strong> · Driver: <strong style={{color:C.text}}>{r.driver}</strong></div>
+          </Card>
+        ))}
+        <div style={{height:8}}/>
+      </div>
+    </div>
+  );
+}
+
+function AdminAnalytics() {
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul'];
+  const revenue=[28,32,29,38,42,45,48.2];
+  const rideCount=[1.8,2.1,1.9,2.4,2.65,2.78,2.85];
+  const maxRev=Math.max(...revenue);
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="Analytics"/>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:12}}>
+        {/* Revenue chart */}
+        <Card>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:4}}>Revenue (K USD) · 2026</div>
+          <div style={{fontSize:11,color:C.text2,marginBottom:14}}>Monthly gross revenue</div>
+          <div style={{display:'flex',gap:5,alignItems:'flex-end',height:110}}>
+            {months.map((m,i)=>(
+              <div key={m} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                <div style={{fontSize:9,color:i===months.length-1?C.amber:C.accent,fontWeight:700}}>${revenue[i]}K</div>
+                <div style={{width:'100%',background:i===months.length-1?C.amber:C.accentDim,borderRadius:'5px 5px 0 0',height:Math.max((revenue[i]/maxRev)*95,4),border:`1px solid ${i===months.length-1?C.amber:C.accent}55`,transition:'height 0.5s ease'}}/>
+                <div style={{fontSize:9,color:C.text2,fontWeight:600}}>{m}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+        {/* KPIs */}
+        <div style={{display:'flex',gap:8}}>
+          {[{label:'Avg Ride Value',val:'$16.94',up:true},{label:'Completion',val:'96.2%',up:true},{label:'Cancellation',val:'3.8%',up:false}].map(m=>(
+            <Card key={m.label} style={{flex:1,textAlign:'center',padding:'12px 6px'}}>
+              <div style={{fontSize:14,fontWeight:700,color:m.up?C.green:C.red}}>{m.val}</div>
+              <div style={{fontSize:9,color:C.text2,marginTop:3}}>{m.label}</div>
+            </Card>
+          ))}
+        </div>
+        {/* Ride type breakdown */}
+        <Card>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:12}}>Ride Type Share</div>
+          {[{label:'Economy',pct:52,color:C.accent},{label:'Comfort',pct:28,color:C.purple},{label:'Premium',pct:12,color:C.amber},{label:'XL',pct:8,color:C.green}].map(r=>(
+            <div key={r.label} style={{marginBottom:10}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:5}}>
+                <span style={{color:C.text2,fontWeight:500}}>{r.label}</span>
+                <span style={{fontWeight:700,color:C.text}}>{r.pct}%</span>
+              </div>
+              <div style={{background:C.card2,borderRadius:5,height:7}}>
+                <div style={{background:r.color,borderRadius:5,height:7,width:`${r.pct}%`,transition:'width 0.8s ease'}}/>
+              </div>
+            </div>
+          ))}
+        </Card>
+        {/* Top cities */}
+        <Card>
+          <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:10}}>Top Cities</div>
+          {[{city:'New York',rides:'892',pct:31},{city:'Los Angeles',rides:'641',pct:23},{city:'Chicago',rides:'534',pct:19},{city:'Miami',rides:'380',pct:13}].map((c,i)=>(
+            <div key={c.city} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:i<3?`1px solid ${C.border}`:'none'}}>
+              <span style={{fontSize:12,fontWeight:700,color:C.text2,minWidth:16}}>{i+1}</span>
+              <span style={{flex:1,fontSize:13,fontWeight:600,color:C.text}}>{c.city}</span>
+              <span style={{fontSize:12,color:C.text2}}>{c.rides} rides</span>
+              <span style={{fontSize:12,fontWeight:700,color:C.amber}}>{c.pct}%</span>
+            </div>
+          ))}
+        </Card>
+        <div style={{height:8}}/>
+      </div>
+    </div>
+  );
+}
+
+function AdminSettings({ goto }) {
+  const sections = [
+    {title:'General', items:['App Configuration','Pricing & Surge Rules','Service Areas','Promo Codes']},
+    {title:'Notifications', items:['Push Alert Templates','Email Reports','SMS Gateway']},
+    {title:'Security', items:['API Keys & Webhooks','Role & Access Control','Audit Logs']},
+    {title:'Danger Zone', items:['Clear Cache','Export All Data'], danger:true},
+  ];
+  return (
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <TopBar title="Settings" onBack={()=>goto('home')}/>
+      <div style={{flex:1,overflowY:'auto',padding:'0 16px',display:'flex',flexDirection:'column',gap:14}}>
+        {sections.map(g=>(
+          <div key={g.title}>
+            <div style={{fontSize:10,fontWeight:700,color:g.danger?C.red:C.text2,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:8}}>{g.title}</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {g.items.map(s=>(
+                <Card key={s} style={{display:'flex',alignItems:'center',padding:'13px 16px',border:`1px solid ${g.danger?C.red+'33':C.border}`}}>
+                  <span style={{flex:1,fontSize:14,fontWeight:500,color:g.danger?C.red:C.text}}>{s}</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.text2} strokeWidth="2" strokeLinecap="round"><path d="m9 18 6-6-6-6"/></svg>
+                </Card>
+              ))}
+            </div>
+          </div>
+        ))}
+        <div style={{height:8}}/>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ROLE SWITCHER + ROOT
+// ═══════════════════════════════════════════════════════════════════
+function RoleSwitcher({ role, onChange }) {
+  const roles = [
+    {id:'user',   label:'Rider',  emoji:'👤', color:C.accent},
+    {id:'driver', label:'Driver', emoji:'🚗', color:C.green},
+    {id:'admin',  label:'Admin',  emoji:'⚡', color:C.amber},
+  ];
+  return (
+    <div style={{display:'flex',gap:0,background:'#111115',borderRadius:18,padding:5,border:`1px solid ${C.border}`,boxShadow:'0 4px 24px rgba(0,0,0,0.5)'}}>
+      {roles.map(r=>{
+        const active = role===r.id;
+        return (
+          <button key={r.id} onClick={()=>onChange(r.id)} style={{flex:1,background:active?r.color:'transparent',border:'none',borderRadius:13,padding:'11px 14px',cursor:'pointer',transition:'all 0.22s cubic-bezier(.4,0,.2,1)',color:active?'#000':'#6B6B70',fontFamily:'Space Grotesk',fontWeight:700,fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',gap:7,boxShadow:active?`0 4px 20px ${r.color}55`:'none'}}>
+            <span style={{fontSize:16}}>{r.emoji}</span>{r.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function App() {
+  const [role, setRole] = useState('user');
+  const handleRole = (r)=>setRole(r);
+  const roleLabel = {user:'Alex Johnson · Rider', driver:'Marcus Thompson · Driver', admin:'Admin Console'};
+  const roleColor = {user:C.accent, driver:C.green, admin:C.amber};
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:18,width:'100%',maxWidth:500}}>
+      {/* Brand */}
+      <div style={{display:'flex',alignItems:'center',gap:14}}>
+        <div style={{width:52,height:52,borderRadius:14,overflow:'hidden',border:`2px solid ${C.border2}`,boxShadow:'0 8px 24px rgba(0,0,0,0.5)',flexShrink:0}}>
+          <img src="velocity-logo.jfif" alt="Velocity" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+        </div>
+        <div>
+          <div style={{fontSize:24,fontWeight:800,color:'white',letterSpacing:'-0.8px',lineHeight:1}}>VELOCITY</div>
+          <div style={{fontSize:9,color:'#555',letterSpacing:5,textTransform:'uppercase',marginTop:4}}>THE REVOLUTION</div>
+        </div>
+      </div>
+
+      {/* Role switcher */}
+      <div style={{width:'100%',maxWidth:390}}>
+        <RoleSwitcher role={role} onChange={handleRole}/>
+      </div>
+
+      {/* Role label */}
+      <div style={{fontSize:12,color:C.text2,fontWeight:500}}>
+        Viewing as: <span style={{color:roleColor[role],fontWeight:700}}>{roleLabel[role]}</span>
+      </div>
+
+      {/* Phone */}
+      <div style={{width:390,height:844,background:'#0E0E11',borderRadius:54,border:'7px solid #2A2A30',overflow:'hidden',boxShadow:'0 50px 120px rgba(0,0,0,0.9), 0 0 0 1px #3A3A42, inset 0 0 0 1px rgba(255,255,255,0.04)',position:'relative',flexShrink:0}}>
+        {/* Dynamic island */}
+        <div style={{position:'absolute',top:0,left:'50%',transform:'translateX(-50%)',width:120,height:35,background:'#0E0E11',borderRadius:'0 0 22px 22px',zIndex:20,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{width:90,height:28,background:'#000',borderRadius:20,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+            <div style={{width:10,height:10,borderRadius:'50%',background:'#1a1a1a',border:'1px solid #2a2a2a'}}/>
+            <div style={{width:22,height:8,borderRadius:10,background:'#1a1a1a',border:'1px solid #2a2a2a'}}/>
+          </div>
+        </div>
+        <div style={{position:'absolute',inset:0,overflow:'hidden'}}>
+          {role==='user'   && <UserApp key="user"/>}
+          {role==='driver' && <DriverApp key="driver"/>}
+          {role==='admin'  && <AdminApp key="admin"/>}
+        </div>
+        {/* Side button highlights */}
+        <div style={{position:'absolute',top:120,right:-8,width:5,height:32,background:'#3A3A42',borderRadius:'0 4px 4px 0'}}/>
+        <div style={{position:'absolute',top:180,right:-8,width:5,height:56,background:'#3A3A42',borderRadius:'0 4px 4px 0'}}/>
+        <div style={{position:'absolute',top:140,left:-8,width:5,height:28,background:'#3A3A42',borderRadius:'4px 0 0 4px'}}/>
+        <div style={{position:'absolute',top:190,left:-8,width:5,height:56,background:'#3A3A42',borderRadius:'4px 0 0 4px'}}/>
+        <div style={{position:'absolute',top:260,left:-8,width:5,height:56,background:'#3A3A42',borderRadius:'4px 0 0 4px'}}/>
+      </div>
+
+      <div style={{fontSize:11,color:'#2E2E36',textAlign:'center',letterSpacing:'0.3px'}}>
+        Interactive prototype · Switch roles above to explore each experience
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
